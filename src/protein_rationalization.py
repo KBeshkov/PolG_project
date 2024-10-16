@@ -10,6 +10,7 @@ from tmtools import tm_align
 from tmtools.io import get_structure, get_residue_data
 parser = PDBParser(QUIET=True)
 
+
 class ProtRatio:
     def __init__(self,sequence,save_path, opt_algorithm):
         self.sequence = self.to_elements(sequence)
@@ -17,7 +18,7 @@ class ProtRatio:
         self.save_path = save_path
         self.opt_algorithm = opt_algorithm
         self.structure_original = parser.get_structure('PolG_structure', '/Users/kosio/Repos/PolG_project/Structures/pdb8udk.ent')#self.structure_prediciton(self.sequence)
-        #self.structure_original, _ = self.structure_prediciton(self.sequence)
+        #self.structure_original = self.structure_prediciton(self.sequence)
         self.atoms = self.protein_coordinates(self.structure_original)
         
     def to_elements(self, sequence):
@@ -29,6 +30,7 @@ class ProtRatio:
     def protein_coordinates(self, structure):
         chain = next(structure.get_chains())
         coords, seq = get_residue_data(chain)
+        print(coords.shape)
         #coordinates = []
         #for model in structure:
         #    for chain in model:
@@ -51,21 +53,6 @@ class ProtRatio:
         res = tm_align(self.atoms, atoms_x, self.to_list(self.sequence)[0], self.to_list(seq)[0])
         return res.rmsd
 
-    
-    def step(self, protein, deletions=1):
-        proteins = []
-        scores = []
-        for i, comb in enumerate(itertools.combinations(np.arange(0,len(protein)), deletions)):
-            self.protein_index+=1
-            proteins.append(np.delete(protein,comb[i]))
-            struct, seq = self.structure_prediciton(proteins[-1])
-            if len(seq)>2:
-                scores.append(self.distance_function(struct, seq))
-            else:
-                scores.append(1000) #temporary fix for proteins of size 2, not necessary for more general cases.
-            print(proteins[np.nanargmin(scores)])
-        return proteins[np.nanargmin(scores)], scores
-    
     def save_fasta(self, sequence, name):
         with open(name, "w") as fasta_file:
             fasta_file.write(">seq"+str(self.protein_index)+f"\n{sequence}")
@@ -75,9 +62,9 @@ class ProtRatio:
         protein_trajectory = [new_protein]
         protein_scores = []
         for n in range(n_steps):
+            self.protein_index += 1
             new_protein = self.opt_algorithm.step(new_protein)
             struct = self.structure_prediciton(new_protein)
-
             protein_trajectory.append(self.to_list(new_protein))
             score = self.distance_function(struct, new_protein)
             protein_scores.append(score)
@@ -92,7 +79,7 @@ class EvolutionAlgorithm:
         self.generations = generations
         self.amino_acids = "ACDEFGHIKLMNPQRSTVWY"
         
-    def mutate(self, sequence):
+    def mutatation(self, sequence):
         mutation_mask = np.random.rand(len(sequence))<self.mutation_rate
         new_sequence = np.array(sequence)
         new_sequence[mutation_mask] = np.random.choice(list(self.amino_acids),size=sum(mutation_mask))
@@ -110,12 +97,12 @@ class EvolutionAlgorithm:
     def step(self, sequence):
         new_seq = list(sequence)
         for gen in range(self.generations):
-            new_seq = self.mutate(new_seq)
+            new_seq = self.mutatation(new_seq)
             new_seq = self.deletion(new_seq)
             
             if np.random.rand()<self.crossover_rate:
                 new_seq2 = self.deletion(new_seq)
-                new_seq2 = self.mutate(new_seq)
+                new_seq2 = self.mutation(new_seq)
 
                 new_seq = self.crossover(new_seq, new_seq2)
         return new_seq
@@ -126,6 +113,8 @@ class EvolutionAlgorithm:
         
         
 PolG = "MSRLLWRKVAGATVGPGPVPAPGRWVSSSVPASDPSDGQRRRQQQQQQQQQQQQQPQQPQVLSSEGGQLRHNPLDIQMLSRGLHEQIFGQGGEMPGEAAVRRSVEHLQKHGLWGQPAVPLPDVELRLPPLYGDNLDQHFRLLAQKQSLPYLEAANLLLQAQLPPKPPAWAWAEGWTRYGPEGEAVPVAIPEERALVFDVEVCLAEGTCPTLAVAISPSAWYSWCSQRLVEERYSWTSQLSPADLIPLEVPTGASSPTQRDWQEQLVVGHNVSFDRAHIREQYLIQGSRMRFLDTMSMHMAISGLSSFQRSLWIAAKQGKHKVQPPTKQGQKSQRKARRGPAISSWDWLDISSVNSLAEVHRLYVGGPPLEKEPRELFVKGTMKDIRENFQDLMQYCAQDVWATHEVFQQQLPLFLERCPHPVTLAGMLEMGVSYLPVNQNWERYLAEAQGTYEELQREMKKSLMDLANDACQLLSGERYKEDPWLWDLEWDLQEFKQKKAKKVKKEPATASKLPIEGAGAPGDPMDQEDLGPCSEEEEFQQDVMARACLQKLKGTTELLPKRPQHLPGHPGWYRKLCPRLDDPAWTPGPSLLSLQMRVTPKLMALTWDGFPLHYSERHGWGYLVPGRRDNLAKLPTGTTLESAGVVCPYRAIESLYRKHCLEQGKQQLMPQEAGLAEEFLLTDNSAIWQTVEELDYLEVEAEAKMENLRAAVPGQPLALTARGGPKDTQPSYHHGNGPYNDVDIPGCWFFKLPHKDGNSCNVGSPFAKDFLPKMEDGTLQAGPGGASGPRALEINKMISFWRNAHKRISSQMVVWLPRSALPRAVIRHPDYDEEGLYGAILPQVVTAGTITRRAVEPTWLTASNARPDRVGSELKAMVQAPPGYTLVGADVDSQELWIAAVLGDAHFAGMHGCTAFGWMTLQGRKSRGTDLHSKTATTVGISREHAKIFNYGRIYGAGQPFAERLLMQFNHRLTQQEAAEKAQQMYAATKGLRWYRLSDEGEWLVRELNLPVDRTEGGWISLQDLRKVQRETARKSQWKKWEVVAERAWKGGTESEMFNKLESIATSDIPRTPVLGCCISRALEPSAVQEEFMTSRVNWVVQSSAVDYLHLMLVAMKWLFEEFAIDGRFCISIHDEVRYLVREEDRYRAALALQITNLLTRCMFAYKLGLNDLPQSVAFFSAVDIDRCLRKEVTMDCKTPSNPTGMERRYGIPQGEALDIYQIIELTKGSLEKRSQPGP"
-Evol = EvolutionAlgorithm(0.001,0.001,1)
-new_prot = Evol.step(PolG, generations=450)
-print(''.join(new_prot))
+Evol = EvolutionAlgorithm(0.01,0.001,1,generations=250)
+prot_reducer = ProtRatio(PolG,"./Protein_predictions/",Evol)
+new_prot = prot_reducer.rationalize(3)
+#new_prot = Evol.step(PolG, generations=350)
+print(new_prot)
